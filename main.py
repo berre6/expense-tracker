@@ -5,7 +5,8 @@ from expenses import (
     show_expenses,
     get_by_category,
     calculate_category_total,
-    delete_expense
+    delete_expense,
+    update_expense
 )
 
 from storage import save_expenses, load_expenses
@@ -23,8 +24,9 @@ while True:
     print("5. Çıkış")
     print("6. Kategori toplamı")
     print("7. Harcama sil")
+    print("8. Harcama güncelle")
 
-    seçim = input("Seçiminizi yapın (1-7): ")
+    seçim = input("Seçiminizi yapın (1-8): ")
 
 
     if seçim == "1":
@@ -93,10 +95,27 @@ while True:
             print("Harcama bulunamadı.")
 
 
+    elif seçim == "8":
+        name = input("Harcama adı:")
+        category = input("Kategori:")
+        new_amount = int(input("Yeni tutar:"))
+
+        updated = update_expense(expenses, name, category, new_amount)
+
+        if updated:
+            save_expenses(expenses)
+            print("Harcama güncellendi.")
+
+        else :
+            print("Harcama bulunamadı.")
+
+
+
+
 
     else:
 
-      print("Lütfen 1-7 arasında bir seçim yapın.")
+      print("Lütfen 1-8 arasında bir seçim yapın.")
 
 
 

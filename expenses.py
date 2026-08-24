@@ -55,3 +55,11 @@ def delete_expense(expenses, name, category):
             expenses.remove(expense)
             return True
     return False
+
+def update_expense(expenses, name, category, new_amount):
+    for expense in expenses:
+        if expense["name"] == name and expense["category"] == category:
+           expense["amount"] = new_amount
+           return True
+
+    return False
