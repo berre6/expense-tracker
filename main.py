@@ -1,8 +1,10 @@
 from expenses import (
     add_expense,
+    calculate_category_total,
     calculate_total,
     show_expenses,
-    get_by_category
+    get_by_category,
+    calculate_category_total
 )
 
 from storage import save_expenses, load_expenses
@@ -69,6 +71,11 @@ while True:
 
         print("Program sonlandırılıyor.")
         break
+
+    elif seçim == "6":
+       category = input("Kategori adı: ")
+       total = calculate_category_total(expenses, category)
+       print(f"{category} kategorisinin toplamı: {total} TL")
 
 
     else:

@@ -41,3 +41,10 @@ def get_by_category(expenses, category):
             filtered_expenses.append(expense)
 
     return filtered_expenses
+
+def calculate_category_total(expenses, category):
+    total = 0
+    for expense in expenses:
+        if expense["category"] == category:
+            total += expense["amount"]
+    return total
