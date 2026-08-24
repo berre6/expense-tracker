@@ -48,3 +48,10 @@ def calculate_category_total(expenses, category):
         if expense["category"] == category:
             total += expense["amount"]
     return total
+
+def delete_expense(expenses, name, category):
+    for expense in expenses:
+        if expense["name"] == name and expense["category"] == category:
+            expenses.remove(expense)
+            return True
+    return False
