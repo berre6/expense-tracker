@@ -4,9 +4,11 @@ from expenses import (
     calculate_total,
     show_expenses,
     get_by_category,
-    calculate_category_total,
     delete_expense,
-    update_expense
+    update_expense,
+    get_valid_amount,
+    get_valid_choice
+
 )
 
 from storage import save_expenses, load_expenses
@@ -26,44 +28,30 @@ while True:
     print("7. Harcama sil")
     print("8. Harcama güncelle")
 
-    seçim = input("Seçiminizi yapın (1-8): ")
+    seçim = get_valid_choice()
 
-
-    if seçim == "1":
+    if seçim == 1:
 
         name = input("Harcama adı: ")
-
-        while True:
-            try:
-                amount = int(input("Harcama miktarı: "))
-
-                if amount <= 0:
-                    print("Tutar 0'dan büyük olmalı.")
-                    continue
-
-                break
-
-            except ValueError:
-                print("Geçerli bir sayı girin.")
-
+        amount = get_valid_amount()      
         category = input("Harcama kategorisi: ")
 
         add_expense(expenses, name, amount, category)
         save_expenses(expenses)
 
 
-    elif seçim == "2":
+    elif seçim == 2:
 
         total = calculate_total(expenses)
         print(f"Toplam harcama: {total} TL")
 
 
-    elif seçim == "3":
+    elif seçim == 3:
 
         show_expenses(expenses)
 
 
-    elif seçim == "4":
+    elif seçim == 4:
 
         category = input("Kategori adı: ")
 
@@ -72,17 +60,17 @@ while True:
         show_expenses(filtered_expenses)
 
 
-    elif seçim == "5":
+    elif seçim == 5:
 
         print("Program sonlandırılıyor.")
         break
 
-    elif seçim == "6":
+    elif seçim == 6:
        category = input("Kategori adı: ")
        total = calculate_category_total(expenses, category)
        print(f"{category} kategorisinin toplamı: {total} TL")
 
-    elif seçim == "7":
+    elif seçim == 7:
         name = input("Silinecek harcama adı: ")
         category = input("Silinecek harcama kategorisi: ")
 
@@ -95,7 +83,7 @@ while True:
             print("Harcama bulunamadı.")
 
 
-    elif seçim == "8":
+    elif seçim == 8:
         name = input("Harcama adı:")
         category = input("Kategori:")
         new_amount = int(input("Yeni tutar:"))
@@ -116,6 +104,9 @@ while True:
     else:
 
       print("Lütfen 1-8 arasında bir seçim yapın.")
+
+
+
 
 
 
