@@ -1,20 +1,8 @@
-from expenses import (
-    add_expense,
-    calculate_category_total,
-    calculate_total,
-    show_expenses,
-    get_by_category,
-    delete_expense,
-    update_expense,
-    get_valid_amount,
-    get_valid_choice
-
-)
-
-from storage import save_expenses, load_expenses
+from expense_tracker_oop import ExpenseTracker
+from expenses import get_valid_amount, get_valid_choice
 
 
-expenses = load_expenses()
+tracker = ExpenseTracker()
 
 
 while True:
@@ -31,34 +19,39 @@ while True:
     seçim = get_valid_choice()
 
     if seçim == 1:
+      name = input("Harcama adı: ")
+      amount = get_valid_amount()
+      category = input("Harcama kategorisi: ")
 
-        name = input("Harcama adı: ")
-        amount = get_valid_amount()      
-        category = input("Harcama kategorisi: ")
+      tracker.add_expense(name, amount, category)
+      tracker.save()
 
-        add_expense(expenses, name, amount, category)
-        save_expenses(expenses)
-
+      print("Harcama eklendi.")
 
     elif seçim == 2:
 
-        total = calculate_total(expenses)
-        print(f"Toplam harcama: {total} TL")
-
+      total = tracker.calculate_total()
+      print(f"Toplam harcama: {total} TL")
 
     elif seçim == 3:
 
-        show_expenses(expenses)
-
+        tracker.show_expenses()
 
     elif seçim == 4:
 
         category = input("Kategori adı: ")
 
-        filtered_expenses = get_by_category(expenses, category)
+        filtered_expenses = tracker.get_by_category(category)
 
-        show_expenses(filtered_expenses)
-
+        if not filtered_expenses:
+            print("Bu kategoride harcama bulunamadı.")
+        else:
+            for expense in filtered_expenses:
+                print(
+                  f"Name: {expense.name}, "
+                  f"Category: {expense.category}, "
+                  f"Amount: {expense.amount}"
+                )
 
     elif seçim == 5:
 
@@ -66,44 +59,41 @@ while True:
         break
 
     elif seçim == 6:
-       category = input("Kategori adı: ")
-       total = calculate_category_total(expenses, category)
-       print(f"{category} kategorisinin toplamı: {total} TL")
+
+        category = input("Kategori adı: ")
+
+        total = tracker.calculate_category_total(category)
+
+        print(f"{category} kategorisinin toplamı: {total} TL")
 
     elif seçim == 7:
+
         name = input("Silinecek harcama adı: ")
         category = input("Silinecek harcama kategorisi: ")
 
-        deleted = delete_expense(expenses, name, category)
+        deleted = tracker.delete_expense(name, category)
 
         if deleted:
-            save_expenses(expenses)
-            print("Harcama silindi.")
+          tracker.save()
+          print("Harcama silindi.")
+        else:
+          print("Harcama bulunamadı.")
+
+    elif seçim == 8:
+
+        name = input("Harcama adı: ")
+        category = input("Kategori: ")
+        new_amount = get_valid_amount()
+
+        updated = tracker.update_expense(name, category, new_amount)
+
+        if updated:
+            tracker.save()
+            print("Harcama güncellendi.")
         else:
             print("Harcama bulunamadı.")
 
 
-    elif seçim == 8:
-        name = input("Harcama adı:")
-        category = input("Kategori:")
-        new_amount = int(input("Yeni tutar:"))
-
-        updated = update_expense(expenses, name, category, new_amount)
-
-        if updated:
-            save_expenses(expenses)
-            print("Harcama güncellendi.")
-
-        else :
-            print("Harcama bulunamadı.")
-
-
-
-
-
-    else:
-
-      print("Lütfen 1-8 arasında bir seçim yapın.")
 
 
 
