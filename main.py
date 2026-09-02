@@ -1,5 +1,5 @@
 from expense_tracker_oop import ExpenseTracker
-from expenses import get_valid_amount, get_valid_choice
+from input_utils import get_valid_amount, get_valid_choice
 
 
 tracker = ExpenseTracker()

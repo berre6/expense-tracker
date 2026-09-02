@@ -40,13 +40,6 @@ class Expense:
         datetime.fromisoformat(data["date"])
     )
 
-  
-
-    
-
-    
-   
- 
 
 class ExpenseTracker:
 
