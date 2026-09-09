@@ -1,8 +1,19 @@
 from expense_tracker_oop import ExpenseTracker,Expense
 import pytest
+import database
+
+database.DB_PATH = "data/test_expenses.db"
+database.create_table()
 
 @pytest.fixture
 def tracker():
+    connection = database.get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("DELETE FROM expenses")
+    connection.commit()
+    connection.close()
+
     tracker = ExpenseTracker()
     tracker.expenses = []
     return tracker
@@ -82,14 +93,6 @@ def test_calculate_nonexistent_category_total(tracker):
     assert result == 0
 
 
-def test_expense_conversion():
-    expense = Expense("Kahve", 80, "Food")
-    expense_dict = expense.to_dict()
-    assert expense_dict == {"name": "Kahve", "amount": 80, "category": "Food", "date": expense.date.isoformat()}
-    new_expense = Expense.from_dict(expense_dict)
-    assert new_expense.name == "Kahve"
-    assert new_expense.amount == 80
-    assert new_expense.category == "Food"
 
 
 

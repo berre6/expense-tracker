@@ -1,5 +1,6 @@
 from expense_tracker_oop import ExpenseTracker
 from input_utils import get_valid_amount, get_valid_choice
+from database import get_categories_sorted_by_total
 
 
 tracker = ExpenseTracker()
@@ -15,6 +16,7 @@ while True:
     print("6. Kategori toplamı")
     print("7. Harcama sil")
     print("8. Harcama güncelle")
+    print("9. Kategorileri toplam harcamaya göre göster ")
 
     seçim = get_valid_choice()
 
@@ -24,8 +26,6 @@ while True:
       category = input("Harcama kategorisi: ")
 
       tracker.add_expense(name, amount, category)
-      tracker.save()
-
       print("Harcama eklendi.")
 
     elif seçim == 2:
@@ -74,7 +74,6 @@ while True:
         deleted = tracker.delete_expense(name, category)
 
         if deleted:
-          tracker.save()
           print("Harcama silindi.")
         else:
           print("Harcama bulunamadı.")
@@ -88,10 +87,18 @@ while True:
         updated = tracker.update_expense(name, category, new_amount)
 
         if updated:
-            tracker.save()
             print("Harcama güncellendi.")
         else:
             print("Harcama bulunamadı.")
+
+    elif seçim == 9:
+        categories = get_categories_sorted_by_total()
+
+        if not categories:
+            print("Hiç harcama yok.")
+        else:
+            for category, total in categories:
+                print(f"Kategori: {category}, Toplam: {total} TL")
 
 
 

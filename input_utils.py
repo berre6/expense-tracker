@@ -17,10 +17,10 @@ def get_valid_amount():
 def get_valid_choice():
     while True:
         try:
-            seçim = int(input("Seçiminizi yapın (1-8): "))
+            seçim = int(input("Seçiminizi yapın (1-9): "))
 
-            if seçim < 1 or seçim > 8:
-                print("1 ile 8 arasında bir seçim yapın.")
+            if seçim < 1 or seçim > 9:
+                print("1 ile 9 arasında bir seçim yapın.")
                 continue
 
             return seçim

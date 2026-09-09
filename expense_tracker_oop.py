@@ -1,14 +1,14 @@
-from storage import load_expenses, save_expenses
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
+from database import add_expense, get_expenses, delete_expense as delete_expense_from_db, update_expense as update_expense_from_db
 
 class Expense:
 
-    def __init__(self, name, amount, category, date=None):
+    def __init__(self, name, amount, category, date=None, id=None): 
         self.name = name
         self.amount = amount
         self.category = category
+        self.id = id
 
         if date is None:
           self.date = datetime.now(ZoneInfo("Europe/Istanbul"))
@@ -21,53 +21,52 @@ class Expense:
       return f"{self.name} - {self.category} - {self.amount} TL"
 
 
-    def to_dict(self):
-      return {
-        "name": self.name,
-        "amount": self.amount,
-        "category": self.category,
-        "date": self.date.isoformat()
-    
-    }
-
-
-    @classmethod
-    def from_dict(cls, data):
-     return cls(
-        data["name"],
-        data["amount"],
-        data["category"],
-        datetime.fromisoformat(data["date"])
-    )
-
 
 class ExpenseTracker:
 
     def __init__(self):
-      loaded_expenses = load_expenses()
-
+      loaded_expenses = get_expenses()
       self.expenses = []
 
       for expense in loaded_expenses:
         self.expenses.append(
-            Expense.from_dict(expense)
+            Expense(
+                expense[1],
+                expense[2],
+                expense[3],
+                datetime.fromisoformat(expense[4]),
+                expense[0]
+            )
         )
 
     def get_expense_count(self):
         return len(self.expenses)
 
-    def save(self):
-         save_expenses(self.expenses)
 
     def add_expense(self, name, amount, category):
-        for expense in self.expenses:
-            if expense.name == name and expense.category == category:
-                expense.amount += amount
-                return
 
-        self.expenses.append(
-            Expense(name, amount, category)
+      expense = Expense(name, amount, category)
+
+      add_expense(
+        name,
+        amount,
+        category,
+        expense.date.isoformat()
+    )
+
+      self.expenses = []
+
+      for expense in get_expenses():
+       self.expenses.append(
+            Expense(
+                expense[1],
+                expense[2],
+                expense[3],
+                datetime.fromisoformat(expense[4]),
+                expense[0]
+            )
         )
+        
 
     def calculate_total(self):
         total = 0
@@ -106,6 +105,7 @@ class ExpenseTracker:
     def delete_expense(self, name, category):
         for expense in self.expenses:
             if expense.name == name and expense.category == category:
+                delete_expense_from_db(expense.id)
                 self.expenses.remove(expense)
                 return True
 
@@ -114,6 +114,7 @@ class ExpenseTracker:
     def update_expense(self, name, category, new_amount):
         for expense in self.expenses:
             if expense.name == name and expense.category == category:
+                update_expense_from_db(expense.id, new_amount)
                 expense.amount = new_amount
                 return True
 
