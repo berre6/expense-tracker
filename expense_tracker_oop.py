@@ -25,7 +25,10 @@ class Expense:
 class ExpenseTracker:
 
     def __init__(self):
-      loaded_expenses = get_expenses()
+      loaded_expenses = sorted(
+      get_expenses(),
+      key=lambda expense: expense[0]
+)
       self.expenses = []
 
       for expense in loaded_expenses:
@@ -56,7 +59,10 @@ class ExpenseTracker:
 
       self.expenses = []
 
-      for expense in get_expenses():
+      for expense in sorted(
+      get_expenses(),
+      key=lambda expense: expense[0]
+       ):
        self.expenses.append(
             Expense(
                 expense[1],

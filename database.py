@@ -5,8 +5,37 @@ DB_PATH = "data/expenses.db"
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.row_factory = sqlite3.Row
     return connection
 
+def get_expense_count(category=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    if category:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM expenses
+            JOIN categories
+            ON expenses.category_id = categories.id
+            WHERE categories.name = ?
+            """,
+            (category,)
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM expenses
+            """
+        )
+
+    count = cursor.fetchone()[0]
+
+    connection.close()
+
+    return count
 
 def get_existing_expense(connection, name, category_id):
     cursor = connection.cursor()
@@ -41,32 +70,76 @@ def add_expense(name, amount, category, date):
 
     if existing_expense:
 
-        new_amount = existing_expense[2] + amount
+     new_amount = existing_expense[2] + amount
 
-        cursor.execute(
-            """
-            UPDATE expenses
-            SET amount = ?
-            WHERE id = ?
-            """,
-            (new_amount, existing_expense[0])
-        )
+     cursor.execute(
+        """
+        UPDATE expenses
+        SET amount = ?
+        WHERE id = ?
+        """,
+        (new_amount, existing_expense[0])
+    )
+
+     expense_id = existing_expense[0]
 
     else:
 
-        cursor.execute(
-            """
-            INSERT INTO expenses (name, amount, category_id, date)
-            VALUES (?, ?, ?, ?)
-            """,
-            (name, amount, category_id, date)
-        )
+      cursor.execute(
+        """
+        INSERT INTO expenses (name, amount, category_id, date)
+        VALUES (?, ?, ?, ?)
+        """,
+        (name, amount, category_id, date)
+    )
+
+      expense_id = cursor.lastrowid
 
     connection.commit()
     connection.close()
+    return expense_id
 
-def get_expenses():
+def get_expenses(category=None, limit=10, offset=0):
 
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    if category:
+        cursor.execute("""
+            SELECT expenses.id,
+                   expenses.name,
+                   expenses.amount,
+                   categories.name,
+                   expenses.date
+            FROM expenses
+            JOIN categories
+            ON expenses.category_id = categories.id
+            WHERE categories.name = ?
+            ORDER BY expenses.id DESC
+            LIMIT ? OFFSET ?
+        """, (category, limit, offset))
+
+    else:
+        cursor.execute("""
+            SELECT expenses.id,
+                   expenses.name,
+                   expenses.amount,
+                   categories.name,
+                   expenses.date
+            FROM expenses
+            JOIN categories
+            ON expenses.category_id = categories.id
+            ORDER BY expenses.id DESC
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
+
+    expenses = cursor.fetchall()
+
+    connection.close()
+
+    return expenses
+
+def get_expense_by_id(expense_id):
     connection = get_connection()
     cursor = connection.cursor()
 
@@ -74,17 +147,19 @@ def get_expenses():
     SELECT expenses.id,
            expenses.name,
            expenses.amount,
-           categories.name,
+           categories.name AS category,
            expenses.date
     FROM expenses
     JOIN categories
     ON expenses.category_id = categories.id
-""")
-    expenses = cursor.fetchall()
+    WHERE expenses.id = ?
+    """, (expense_id,))
+
+    expense = cursor.fetchone()
 
     connection.close()
 
-    return expenses
+    return expense
 
 def delete_expense(expense_id):
     connection = get_connection()
@@ -102,6 +177,8 @@ def delete_expense(expense_id):
     connection.close()
 
 
+
+
 def update_expense(expense_id, new_amount):
     connection = get_connection()
     cursor = connection.cursor()
@@ -116,6 +193,67 @@ def update_expense(expense_id, new_amount):
     connection.commit()
     connection.close()
 
+def patch_expense(expense_id, name=None, amount=None, category=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    if name is not None:
+        cursor.execute(
+            """
+            UPDATE expenses
+            SET name = ?
+            WHERE id = ?
+            """,
+            (name, expense_id)
+        )
+
+    if amount is not None:
+        cursor.execute(
+            """
+            UPDATE expenses
+            SET amount = ?
+            WHERE id = ?
+            """,
+            (amount, expense_id)
+        )
+
+    if category is not None:
+        cursor.execute(
+            """
+            SELECT id
+            FROM categories
+            WHERE name = ?
+            """,
+            (category,)
+        )
+
+        category_row = cursor.fetchone()
+
+        if category_row is None:
+            cursor.execute(
+                """
+                INSERT INTO categories (name)
+                VALUES (?)
+                """,
+                (category,)
+            )
+
+            category_id = cursor.lastrowid
+
+        else:
+            category_id = category_row[0]
+
+        cursor.execute(
+            """
+            UPDATE expenses
+            SET category_id = ?
+            WHERE id = ?
+            """,
+            (category_id, expense_id)
+        )
+
+    connection.commit()
+    connection.close()
 
 def get_expenses_sorted_by_amount():
     connection = get_connection()
