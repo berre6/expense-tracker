@@ -4,11 +4,11 @@ from pydantic import BaseModel, Field, model_validator
 class ExpenseCreate(BaseModel):
     name: str = Field(min_length=1)
     amount: int = Field(gt=0)
-    category: str
+    category: str = Field(min_length=1)
 
 
 class ExpenseUpdate(BaseModel):
-    amount: int
+    amount: int = Field(gt=0)
 
 
 class ExpensePatch(BaseModel):

@@ -1,15 +1,395 @@
 import sqlite3
-DB_PATH = "data/expenses.db"
+from datetime import datetime
+from config import settings
 
+from sqlalchemy import (
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    create_engine,
+    select
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    joinedload,
+    relationship,
+    sessionmaker
+)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True
+    )
+
+    name = Column(
+        String,
+        nullable=False
+    )
+
+    expenses = relationship(
+        "Expense",
+        back_populates="category"
+    )
+
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True
+    )
+
+    name = Column(
+        String,
+        nullable=False
+    )
+
+    amount = Column(
+        Integer,
+        nullable=False
+    )
+
+    category_id = Column(
+        Integer,
+        ForeignKey("categories.id"),
+        nullable=False
+    )
+
+    category = relationship(
+        "Category",
+        back_populates="expenses"
+    )
+
+    date = Column(
+        String,
+        nullable=False
+    )
+
+
+
+
+DB_PATH = settings.database_path
+
+engine = create_engine(settings.database_url)
+
+SessionLocal = sessionmaker(
+    bind=engine
+)
 
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
-    connection.execute("PRAGMA foreign_keys = ON")
     connection.row_factory = sqlite3.Row
     return connection
 
+
+def get_session():
+    return SessionLocal()
+
+
+Base.metadata.create_all(engine)
+
+
+def create_table():
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name
+        ON categories(name)
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            category_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            FOREIGN KEY (category_id)
+            REFERENCES categories(id)
+        )
+    """)
+
+    connection.commit()
+    connection.close()
+
+
+def add_category(name):
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "INSERT INTO categories (name) VALUES (?)",
+        (name,)
+    )
+
+    category_id = cursor.lastrowid
+
+    connection.commit()
+    connection.close()
+
+    return category_id
+
+
+def get_category_by_name(name):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT * FROM categories WHERE name = ?",
+        (name,)
+    )
+
+    category = cursor.fetchone()
+
+    connection.close()
+
+    return category
+
+
+def add_expense(name, amount, category, date):
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT id FROM categories WHERE name = ?",
+        (category,)
+    )
+
+    category_row = cursor.fetchone()
+
+    if category_row is None:
+        cursor.execute(
+            "INSERT INTO categories (name) VALUES (?)",
+            (category,)
+        )
+
+        category_id = cursor.lastrowid
+
+    else:
+        category_id = category_row[0]
+
+    cursor.execute(
+        """
+        SELECT id, amount
+        FROM expenses
+        WHERE name = ?
+        AND category_id = ?
+        """,
+        (name, category_id)
+    )
+
+    existing_expense = cursor.fetchone()
+
+    if existing_expense is not None:
+        expense_id = existing_expense[0]
+        new_amount = existing_expense[1] + amount
+
+        cursor.execute(
+            """
+            UPDATE expenses
+            SET amount = ?
+            WHERE id = ?
+            """,
+            (new_amount, expense_id)
+        )
+
+    else:
+        cursor.execute(
+            """
+            INSERT INTO expenses
+            (name, amount, category_id, date)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                name,
+                amount,
+                category_id,
+                date
+            )
+        )
+
+        expense_id = cursor.lastrowid
+
+    connection.commit()
+    connection.close()
+
+    return expense_id
+def add_expense_model(name, amount, category, date, session):
+    statement = select(Category).where(Category.name == category)
+
+    result = session.execute(statement)
+    category_model = result.scalar_one_or_none()
+
+    if category_model is None:
+      category_model = Category(name=category)
+      session.add(category_model)
+      session.flush()
+    statement = select(Expense).where(
+    Expense.name == name,
+    Expense.category_id == category_model.id
+)
+    result = session.execute(statement)
+    existing_expense = result.scalar_one_or_none()
+
+    if existing_expense is not None:
+        existing_expense.amount += amount
+
+    else:
+      expense = Expense(
+        name=name,
+        amount=amount,
+        category_id=category_model.id,
+        date=date
+    )
+      session.add(expense)
+      session.flush()
+
+    session.commit()
+    return existing_expense if existing_expense is not None else expense
+
+
+
+def get_expense_by_id(expense_id):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            expenses.id,
+            expenses.name,
+            expenses.amount,
+            categories.name AS category,
+            expenses.date
+        FROM expenses
+        JOIN categories
+            ON expenses.category_id = categories.id
+        WHERE expenses.id = ?
+        """,
+        (expense_id,)
+    )
+
+    expense = cursor.fetchone()
+
+    connection.close()
+
+    return expense
+
+def get_expense_model_by_id(expense_id, session):
+   
+
+    statement = (
+        select(Expense)
+        .options(joinedload(Expense.category))
+        .where(Expense.id == expense_id)
+    )
+
+    expense = session.execute(statement).scalar_one_or_none()
+
+    return expense
+
+
+def get_expenses(
+    category=None,
+    limit=10,
+    offset=0
+):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+
+    cursor = connection.cursor()
+
+    if category:
+        cursor.execute(
+            """
+            SELECT
+                expenses.id,
+                expenses.name,
+                expenses.amount,
+                categories.name AS category,
+                expenses.date
+            FROM expenses
+            JOIN categories
+                ON expenses.category_id = categories.id
+            WHERE categories.name = ?
+            ORDER BY expenses.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (category, limit, offset)
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                expenses.id,
+                expenses.name,
+                expenses.amount,
+                categories.name AS category,
+                expenses.date
+            FROM expenses
+            JOIN categories
+                ON expenses.category_id = categories.id
+            ORDER BY expenses.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset)
+        )
+
+    expenses = cursor.fetchall()
+
+    connection.close()
+
+    return expenses
+
+def get_expense_models(category=None, limit=10, offset=0):
+    session = get_session()
+
+    statement = (
+        select(Expense)
+        .options(joinedload(Expense.category))
+        .order_by(Expense.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    if category:
+        statement = (
+            statement
+            .join(Expense.category)
+            .where(Category.name == category)
+        )
+
+    expenses = session.execute(statement).scalars().all()
+
+    session.close()
+
+    return expenses
+
+
 def get_expense_count(category=None):
-    connection = get_connection()
+    connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
     if category:
@@ -18,17 +398,15 @@ def get_expense_count(category=None):
             SELECT COUNT(*)
             FROM expenses
             JOIN categories
-            ON expenses.category_id = categories.id
+                ON expenses.category_id = categories.id
             WHERE categories.name = ?
             """,
             (category,)
         )
+
     else:
         cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM expenses
-            """
+            "SELECT COUNT(*) FROM expenses"
         )
 
     count = cursor.fetchone()[0]
@@ -37,164 +415,34 @@ def get_expense_count(category=None):
 
     return count
 
-def get_existing_expense(connection, name, category_id):
+
+def update_expense(expense_id, amount):
+    connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
     cursor.execute(
-        """
-        SELECT id, name, amount
-        FROM expenses
-        WHERE name = ? AND category_id = ?
-        """,
-        (name, category_id)
-    )
-
-    return cursor.fetchone()
-
-
-
-def add_expense(name, amount, category, date):
-    category_id = get_category_id(category)
-
-    if category_id is None:
-      category_id = add_category(category)
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    existing_expense = get_existing_expense(
-      connection,
-      name,
-      category_id
-      )
-
-    if existing_expense:
-
-     new_amount = existing_expense[2] + amount
-
-     cursor.execute(
         """
         UPDATE expenses
         SET amount = ?
         WHERE id = ?
         """,
-        (new_amount, existing_expense[0])
-    )
-
-     expense_id = existing_expense[0]
-
-    else:
-
-      cursor.execute(
-        """
-        INSERT INTO expenses (name, amount, category_id, date)
-        VALUES (?, ?, ?, ?)
-        """,
-        (name, amount, category_id, date)
-    )
-
-      expense_id = cursor.lastrowid
-
-    connection.commit()
-    connection.close()
-    return expense_id
-
-def get_expenses(category=None, limit=10, offset=0):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    if category:
-        cursor.execute("""
-            SELECT expenses.id,
-                   expenses.name,
-                   expenses.amount,
-                   categories.name,
-                   expenses.date
-            FROM expenses
-            JOIN categories
-            ON expenses.category_id = categories.id
-            WHERE categories.name = ?
-            ORDER BY expenses.id DESC
-            LIMIT ? OFFSET ?
-        """, (category, limit, offset))
-
-    else:
-        cursor.execute("""
-            SELECT expenses.id,
-                   expenses.name,
-                   expenses.amount,
-                   categories.name,
-                   expenses.date
-            FROM expenses
-            JOIN categories
-            ON expenses.category_id = categories.id
-            ORDER BY expenses.id DESC
-            LIMIT ? OFFSET ?
-        """, (limit, offset))
-
-    expenses = cursor.fetchall()
-
-    connection.close()
-
-    return expenses
-
-def get_expense_by_id(expense_id):
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-    SELECT expenses.id,
-           expenses.name,
-           expenses.amount,
-           categories.name AS category,
-           expenses.date
-    FROM expenses
-    JOIN categories
-    ON expenses.category_id = categories.id
-    WHERE expenses.id = ?
-    """, (expense_id,))
-
-    expense = cursor.fetchone()
-
-    connection.close()
-
-    return expense
-
-def delete_expense(expense_id):
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        DELETE FROM expenses
-        WHERE id = ?
-        """,
-        (expense_id,)
+        (
+            amount,
+            expense_id
+        )
     )
 
     connection.commit()
     connection.close()
 
 
-
-
-def update_expense(expense_id, new_amount):
-    connection = get_connection()
-    cursor = connection.cursor()
-    cursor.execute(
-    """
-        UPDATE expenses
-        SET amount = ?
-        WHERE id = ?
-    """,
-    (new_amount, expense_id)
-)
-    connection.commit()
-    connection.close()
-
-def patch_expense(expense_id, name=None, amount=None, category=None):
-    connection = get_connection()
+def patch_expense(
+    expense_id,
+    name=None,
+    amount=None,
+    category=None
+):
+    connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
     if name is not None:
@@ -204,7 +452,10 @@ def patch_expense(expense_id, name=None, amount=None, category=None):
             SET name = ?
             WHERE id = ?
             """,
-            (name, expense_id)
+            (
+                name,
+                expense_id
+            )
         )
 
     if amount is not None:
@@ -214,16 +465,15 @@ def patch_expense(expense_id, name=None, amount=None, category=None):
             SET amount = ?
             WHERE id = ?
             """,
-            (amount, expense_id)
+            (
+                amount,
+                expense_id
+            )
         )
 
     if category is not None:
         cursor.execute(
-            """
-            SELECT id
-            FROM categories
-            WHERE name = ?
-            """,
+            "SELECT id FROM categories WHERE name = ?",
             (category,)
         )
 
@@ -231,10 +481,7 @@ def patch_expense(expense_id, name=None, amount=None, category=None):
 
         if category_row is None:
             cursor.execute(
-                """
-                INSERT INTO categories (name)
-                VALUES (?)
-                """,
+                "INSERT INTO categories (name) VALUES (?)",
                 (category,)
             )
 
@@ -249,25 +496,65 @@ def patch_expense(expense_id, name=None, amount=None, category=None):
             SET category_id = ?
             WHERE id = ?
             """,
-            (category_id, expense_id)
+            (
+                category_id,
+                expense_id
+            )
         )
 
     connection.commit()
     connection.close()
 
-def get_expenses_sorted_by_amount():
-    connection = get_connection()
+
+def delete_expense(expense_id):
+    connection = sqlite3.connect(DB_PATH)
     cursor = connection.cursor()
 
-    cursor.execute("""
-        SELECT expenses.name,
-               expenses.amount,
-               categories.name
+    cursor.execute(
+        "DELETE FROM expenses WHERE id = ?",
+        (expense_id,)
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def get_total_expenses():
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT SUM(amount) FROM expenses"
+    )
+
+    total = cursor.fetchone()[0]
+
+    connection.close()
+
+    return total or 0
+
+
+def get_expenses_by_category(category):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            expenses.id,
+            expenses.name,
+            expenses.amount,
+            categories.name AS category,
+            expenses.date
         FROM expenses
         JOIN categories
-        ON expenses.category_id = categories.id
-        ORDER BY expenses.amount DESC
-    """)
+            ON expenses.category_id = categories.id
+        WHERE categories.name = ?
+        ORDER BY expenses.id DESC
+        """,
+        (category,)
+    )
 
     expenses = cursor.fetchall()
 
@@ -275,22 +562,56 @@ def get_expenses_sorted_by_amount():
 
     return expenses
 
-def get_category_expenses_sorted_by_amount(category):
-    connection = get_connection()
+
+def get_expenses_sorted_by_amount():
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
     cursor.execute(
         """
-        SELECT expenses.name,
-        expenses.amount,
-        categories.name
+        SELECT
+            expenses.id,
+            expenses.name,
+            expenses.amount,
+            categories.name AS category,
+            expenses.date
         FROM expenses
-        JOIN categories ON expenses.category_id = categories.id
+        JOIN categories
+            ON expenses.category_id = categories.id
+        ORDER BY expenses.amount DESC
+        """
+    )
+
+    expenses = cursor.fetchall()
+
+    connection.close()
+
+    return expenses
+
+
+def get_category_expenses_sorted_by_amount(category):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            expenses.id,
+            expenses.name,
+            expenses.amount,
+            categories.name AS category,
+            expenses.date
+        FROM expenses
+        JOIN categories
+            ON expenses.category_id = categories.id
         WHERE categories.name = ?
         ORDER BY expenses.amount DESC
         """,
         (category,)
     )
+
     expenses = cursor.fetchall()
 
     connection.close()
@@ -298,161 +619,62 @@ def get_category_expenses_sorted_by_amount(category):
     return expenses
 
 
-def get_category_counts():
-    connection = get_connection()
+def get_expenses_by_date(date):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
     cursor.execute(
         """
-        SELECT categories.name, COUNT(*) as count
+        SELECT
+            expenses.id,
+            expenses.name,
+            expenses.amount,
+            categories.name AS category,
+            expenses.date
         FROM expenses
-        JOIN categories ON expenses.category_id = categories.id
-        GROUP BY categories.name
-        ORDER BY count DESC
-        """
-    )
-    category_counts = cursor.fetchall()
-    connection.close()
-    return category_counts
-
-
-def get_category_averages():
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT categories.name, AVG(expenses.amount) as average
-        FROM expenses
-        JOIN categories ON expenses.category_id = categories.id
-        GROUP BY categories.name
-        ORDER BY average DESC"""
-    )
-    category_averages = cursor.fetchall()
-    connection.close()
-    return category_averages
-
-
-def get_categories_sorted_by_total():
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT categories.name, SUM(expenses.amount) as total
-        FROM expenses
-        JOIN categories ON expenses.category_id = categories.id
-        GROUP BY categories.name
-        ORDER BY total DESC """
-    )
-    categories_sorted_by_total = cursor.fetchall()
-    connection.close()
-    return categories_sorted_by_total
-
-def get_categories_over_500():
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT categories.name, SUM(expenses.amount) as total
-        FROM expenses
-        JOIN categories ON expenses.category_id = categories.id
-        GROUP BY categories.name
-        HAVING total > 500
-        ORDER BY total DESC """
-    )
-    categories_over_500 = cursor.fetchall()
-    connection.close()
-    return categories_over_500
-
-def get_categories_with_multiple_expenses():
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT categories.name, COUNT(*) as count
-        FROM expenses
-        JOIN categories ON expenses.category_id = categories.id
-        GROUP BY categories.name
-        HAVING count >= 2
-        ORDER BY count DESC """
-    )
-    categories_with_multiple_expenses = cursor.fetchall()
-    connection.close()
-    return categories_with_multiple_expenses
-
-
-def add_category(category):
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO categories (name)
-        VALUES (?)
+        JOIN categories
+            ON expenses.category_id = categories.id
+        WHERE expenses.date = ?
+        ORDER BY expenses.id DESC
         """,
-        (category,)
+        (date,)
     )
 
-    category_id = cursor.lastrowid
+    expenses = cursor.fetchall()
 
-    connection.commit()
     connection.close()
 
-    return category_id
+    return expenses
 
-def get_category_id(category):
-    connection = get_connection()
+
+def get_expenses_between_dates(start_date, end_date):
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
+
     cursor.execute(
         """
-        SELECT id FROM categories 
-        WHERE name = ?
-        """
-    , (category,))
-    result = cursor.fetchone()
+        SELECT
+            expenses.id,
+            expenses.name,
+            expenses.amount,
+            categories.name AS category,
+            expenses.date
+        FROM expenses
+        JOIN categories
+            ON expenses.category_id = categories.id
+        WHERE expenses.date BETWEEN ? AND ?
+        ORDER BY expenses.date ASC
+        """,
+        (
+            start_date,
+            end_date
+        )
+    )
+
+    expenses = cursor.fetchall()
+
     connection.close()
 
-
-    if result is None:
-      return None
-
-    return result[0]
-
-
-def create_table():
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS categories(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL 
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            amount INTEGER NOT NULL,
-            category_id INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            FOREIGN KEY (category_id) REFERENCES categories(id)
-        )
-    """)
-
-    cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name
-        ON categories(name)
-    """)
-
-    connection.commit()
-    connection.close()
-
-create_table()
-
-
+    return expenses

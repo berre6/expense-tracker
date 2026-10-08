@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Query, Depends
-from math import ceil
 import database
-from datetime import datetime
 from utils import get_expense_or_404, expense_to_response
+from services.expense_service import (
+    create_expense as create_expense_service,
+    update_expense as update_expense_service,
+    patch_expense as patch_expense_service,
+    delete_expense as delete_expense_service,
+    get_expenses as get_expenses_service
+)
 
 from schemas import (
     ExpenseCreate,
@@ -20,29 +25,18 @@ def get_expenses(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100)
 ):
-
-    offset = (page - 1) * limit
-
-    expenses = database.get_expenses(
+    result = get_expenses_service(
         category=category,
-        limit=limit,
-        offset=offset
+        page=page,
+        limit=limit
     )
 
-    total = database.get_expense_count(category)
-    total_pages = ceil(total / limit)
+    expenses = result["items"]
+    total = result["total"]
+    total_pages = result["total_pages"]
 
     return {
-        "items": [
-            {
-                "id": expense[0],
-                "name": expense[1],
-                "amount": expense[2],
-                "category": expense[3],
-                "date": expense[4]
-            }
-            for expense in expenses
-        ],
+        "items": [expense_to_response(expense) for expense in expenses],
         "page": page,
         "limit": limit,
         "total": total,
@@ -61,29 +55,31 @@ def get_expense(
     response_model=ExpenseResponse,
     status_code=201
 )
-def create_expense(expense: ExpenseCreate):
-    date = datetime.now().strftime("%Y-%m-%d")
-
-    expense_id = database.add_expense(
+def create_expense(
+    expense: ExpenseCreate,
+    session=Depends(database.get_session)
+):
+    created_expense = create_expense_service(
         expense.name,
         expense.amount,
         expense.category,
-        date
+        session
     )
-
-    created_expense = database.get_expense_by_id(expense_id)
-
     return expense_to_response(created_expense)
 
+@router.put("/expenses/{expense_id}", response_model=ExpenseResponse)
 @router.put("/expenses/{expense_id}", response_model=ExpenseResponse)
 def update_expense(
     expense_id: int,
     expense: ExpenseUpdate,
-    existing_expense=Depends(get_expense_or_404)
+    existing_expense=Depends(get_expense_or_404),
+    session=Depends(database.get_session)
 ):
-    database.update_expense(expense_id, expense.amount)
-
-    updated_expense = database.get_expense_by_id(expense_id)
+    updated_expense = update_expense_service(
+        expense_id,
+        expense.amount,
+        session
+    )
 
     return expense_to_response(updated_expense)
 
@@ -92,16 +88,16 @@ def update_expense(
 def patch_expense(
     expense_id: int,
     expense: ExpensePatch,
-    existing_expense=Depends(get_expense_or_404)
+    existing_expense=Depends(get_expense_or_404),
+    session=Depends(database.get_session)
 ):
-    database.patch_expense(
-        expense_id,
-        expense.name,
-        expense.amount,
-        expense.category
-    )
-
-    updated_expense = database.get_expense_by_id(expense_id)
+    updated_expense = patch_expense_service(
+      expense_id,
+      session,
+      expense.name,
+      expense.amount,
+      expense.category
+)
 
     return expense_to_response(updated_expense)
 
@@ -114,4 +110,4 @@ def delete_expense(
     expense_id: int,
     expense=Depends(get_expense_or_404)
 ):
-    database.delete_expense(expense_id)
+    delete_expense_service(expense_id)

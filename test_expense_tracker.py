@@ -3,6 +3,8 @@ import pytest
 import database
 from fastapi.testclient import TestClient
 from api import app
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 client = TestClient(app)
 
@@ -442,6 +444,9 @@ def test_get_expense_not_found():
 database.DB_PATH = "data/test_expenses.db"
 database.create_table()
 
+test_engine = create_engine("sqlite:///data/test_expenses.db")
+database.SessionLocal = sessionmaker(bind=test_engine)
+
 @pytest.fixture
 def tracker():
     connection = database.get_connection()
@@ -529,7 +534,49 @@ def test_calculate_nonexistent_category_total(tracker):
     result = tracker.calculate_category_total("Gaming")
     assert result == 0
 
+def test_add_expense_model():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    assert expense.name == "Kahve"
+    assert expense.amount == 50
+    assert expense.category.name == "Yemek"
+
+    second_expense = database.add_expense_model(
+      "Kahve",
+      30,
+      "Yemek",
+      "2026-10-07",
+      session
+)
+    assert second_expense.amount == 80
+    assert second_expense.id == expense.id
 
 
+def test_create_expense_success():
+    session = database.get_session()
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+    response = client.post(
+        "/expenses",
+        json={
+            "name": "API Kahve",
+            "amount": 40,
+            "category": "API Test"
+        }
+    )
 
-
+    assert response.status_code == 201
+    assert response.json()["name"] == "API Kahve"
+    assert response.json()["amount"] == 40
+    assert response.json()["category"] == "API Test"
