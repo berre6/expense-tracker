@@ -18,9 +18,11 @@ def create_expense(name, amount, category, session):
 
 
 def update_expense(expense_id, amount, session):
-    database.update_expense(expense_id, amount)
-    session.expire_all()
-    return database.get_expense_model_by_id(expense_id, session)
+    return database.update_expense_model(
+        expense_id,
+        amount,
+        session
+    )
 
 def patch_expense(
     expense_id,

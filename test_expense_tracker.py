@@ -563,6 +563,29 @@ def test_add_expense_model():
     assert second_expense.id == expense.id
 
 
+def test_update_expense_model():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    updated_expense = database.update_expense_model(
+        expense.id,
+        100,
+        session
+    )
+
+    assert updated_expense.id == expense.id
+    assert updated_expense.amount == 100
+
 def test_create_expense_success():
     session = database.get_session()
     session.execute(database.Expense.__table__.delete())

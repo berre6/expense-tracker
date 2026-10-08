@@ -268,6 +268,18 @@ def add_expense_model(name, amount, category, date, session):
     session.commit()
     return existing_expense if existing_expense is not None else expense
 
+def update_expense_model(expense_id, amount, session):
+    statement = select(Expense).where(Expense.id == expense_id)
+
+    result = session.execute(statement)
+    expense = result.scalar_one_or_none()
+
+    if expense is not None:
+        expense.amount = amount
+
+    session.commit()
+    return expense
+
 
 
 def get_expense_by_id(expense_id):
