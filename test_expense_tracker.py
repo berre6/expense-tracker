@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from api import app
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from services.expense_service import patch_expense
+from services.expense_service import delete_expense
 
 client = TestClient(app)
 
@@ -141,6 +143,41 @@ def test_api_delete_expense():
     deleted_expense = database.get_expense_by_id(expense_id)
 
     assert deleted_expense is None
+
+
+def test_get_expense_count_model():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    database.add_expense_model(
+        "Ekmek",
+        20,
+        "Market",
+        "2026-10-07",
+        session
+    )
+
+    total = database.get_expense_count_model(
+        session=session
+    )
+
+    food_total = database.get_expense_count_model(
+        category="Yemek",
+        session=session
+    )
+
+    assert total == 2
+    assert food_total == 1
 
 
 def test_api_update_expense():
@@ -586,6 +623,167 @@ def test_update_expense_model():
     assert updated_expense.id == expense.id
     assert updated_expense.amount == 100
 
+
+def test_patch_expense_model():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    patched_expense = database.patch_expense_model(
+        expense.id,
+        name="Latte",
+        amount=80,
+        category="İçecek",
+        session=session
+    )
+
+    assert patched_expense.id == expense.id
+    assert patched_expense.name == "Latte"
+    assert patched_expense.amount == 80
+    assert patched_expense.category.name == "İçecek"
+
+
+def test_patch_expense_model_partial():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    patched_expense = database.patch_expense_model(
+        expense.id,
+        name="Latte",
+        session=session
+    )
+
+    assert patched_expense.id == expense.id
+    assert patched_expense.name == "Latte"
+    assert patched_expense.amount == 50
+    assert patched_expense.category.name == "Yemek"
+
+def test_patch_expense_service_sqlalchemy():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    patched_expense = patch_expense(
+        expense.id,
+        session,
+        amount=100
+    )
+
+    assert patched_expense.id == expense.id
+    assert patched_expense.amount == 100
+    assert patched_expense.name == "Kahve"
+    assert patched_expense.category.name == "Yemek"
+
+
+def test_patch_expense_model_amount_only():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    patched_expense = database.patch_expense_model(
+        expense.id,
+        amount=100,
+        session=session
+    )
+
+    assert patched_expense.id == expense.id
+    assert patched_expense.name == "Kahve"
+    assert patched_expense.amount == 100
+    assert patched_expense.category.name == "Yemek"
+
+def test_patch_expense_model_category_only():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    patched_expense = database.patch_expense_model(
+        expense.id,
+        category="İçecek",
+        session=session
+    )
+
+    assert patched_expense.id == expense.id
+    assert patched_expense.name == "Kahve"
+    assert patched_expense.amount == 50
+    assert patched_expense.category.name == "İçecek"
+
+
+def test_delete_expense_model():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    deleted_expense = database.delete_expense_model(
+        expense.id,
+        session
+    )
+
+    assert deleted_expense.id == expense.id
+
+    remaining_expense = database.get_expense_model_by_id(
+        expense.id,
+        session
+    )
+
+    assert remaining_expense is None
+
+
+
 def test_create_expense_success():
     session = database.get_session()
     session.execute(database.Expense.__table__.delete())
@@ -603,3 +801,32 @@ def test_create_expense_success():
     assert response.json()["name"] == "API Kahve"
     assert response.json()["amount"] == 40
     assert response.json()["category"] == "API Test"
+
+
+def test_delete_expense_service():
+    session = database.get_session()
+
+    session.execute(database.Expense.__table__.delete())
+    session.commit()
+
+    expense = database.add_expense_model(
+        "Kahve",
+        50,
+        "Yemek",
+        "2026-10-07",
+        session
+    )
+
+    deleted_expense = delete_expense(
+        expense.id,
+        session
+    )
+
+    assert deleted_expense.id == expense.id
+
+    remaining_expense = database.get_expense_model_by_id(
+        expense.id,
+        session
+    )
+
+    assert remaining_expense is None

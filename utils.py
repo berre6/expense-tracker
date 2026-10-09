@@ -15,7 +15,7 @@ def expense_to_response(expense):
 
 def get_expense_or_404(
     expense_id: int,
-    session=Depends(database.get_session)
+    session=Depends(database.get_session_dependency)
 ):
     expense = database.get_expense_model_by_id(expense_id, session)
 

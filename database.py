@@ -8,7 +8,8 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
-    select
+    select,
+    func
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -96,6 +97,14 @@ def get_connection():
 
 def get_session():
     return SessionLocal()
+
+def get_session_dependency():
+    session = SessionLocal()
+
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 Base.metadata.create_all(engine)
@@ -280,7 +289,42 @@ def update_expense_model(expense_id, amount, session):
     session.commit()
     return expense
 
+def patch_expense_model(
+    expense_id,
+    name=None,
+    amount=None,
+    category=None,
+    session=None
+):
+    statement = select(Expense).where(Expense.id == expense_id)
 
+    result = session.execute(statement)
+    expense = result.scalar_one_or_none()
+
+    if expense is not None:
+        if name is not None:
+            expense.name = name
+
+        if amount is not None:
+            expense.amount = amount
+
+        if category is not None:
+            statement = select(Category).where(
+                Category.name == category
+            )
+
+            result = session.execute(statement)
+            category_model = result.scalar_one_or_none()
+
+            if category_model is None:
+                category_model = Category(name=category)
+                session.add(category_model)
+                session.flush()
+
+            expense.category_id = category_model.id
+
+    session.commit()
+    return expense
 
 def get_expense_by_id(expense_id):
     connection = sqlite3.connect(DB_PATH)
@@ -375,9 +419,7 @@ def get_expenses(
 
     return expenses
 
-def get_expense_models(category=None, limit=10, offset=0):
-    session = get_session()
-
+def get_expense_models(session, category=None, limit=10, offset=0):
     statement = (
         select(Expense)
         .options(joinedload(Expense.category))
@@ -394,8 +436,6 @@ def get_expense_models(category=None, limit=10, offset=0):
         )
 
     expenses = session.execute(statement).scalars().all()
-
-    session.close()
 
     return expenses
 
@@ -424,6 +464,20 @@ def get_expense_count(category=None):
     count = cursor.fetchone()[0]
 
     connection.close()
+
+    return count
+
+def get_expense_count_model(category=None, session=None):
+    statement = select(func.count()).select_from(Expense)
+
+    if category:
+        statement = (
+            statement
+            .join(Expense.category)
+            .where(Category.name == category)
+        )
+
+    count = session.execute(statement).scalar_one()
 
     return count
 
@@ -530,6 +584,17 @@ def delete_expense(expense_id):
     connection.commit()
     connection.close()
 
+def delete_expense_model(expense_id, session):
+    statement = select(Expense).where(Expense.id == expense_id)
+
+    result = session.execute(statement)
+    expense = result.scalar_one_or_none()
+
+    if expense is not None:
+        session.delete(expense)
+        session.commit()
+
+    return expense
 
 def get_total_expenses():
     connection = sqlite3.connect(DB_PATH)

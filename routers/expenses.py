@@ -23,12 +23,14 @@ router = APIRouter()
 def get_expenses(
     category: str | None = None,
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=10, ge=1, le=100)
+    limit: int = Query(default=10, ge=1, le=100),
+    session=Depends(database.get_session_dependency)
 ):
     result = get_expenses_service(
-        category=category,
-        page=page,
-        limit=limit
+      category=category,
+      page=page,
+      limit=limit,
+      session=session
     )
 
     expenses = result["items"]
@@ -57,7 +59,7 @@ def get_expense(
 )
 def create_expense(
     expense: ExpenseCreate,
-    session=Depends(database.get_session)
+    session=Depends(database.get_session_dependency)
 ):
     created_expense = create_expense_service(
         expense.name,
@@ -73,7 +75,7 @@ def update_expense(
     expense_id: int,
     expense: ExpenseUpdate,
     existing_expense=Depends(get_expense_or_404),
-    session=Depends(database.get_session)
+    session=Depends(database.get_session_dependency)
 ):
     updated_expense = update_expense_service(
         expense_id,
@@ -89,7 +91,7 @@ def patch_expense(
     expense_id: int,
     expense: ExpensePatch,
     existing_expense=Depends(get_expense_or_404),
-    session=Depends(database.get_session)
+    session=Depends(database.get_session_dependency)
 ):
     updated_expense = patch_expense_service(
       expense_id,
@@ -108,6 +110,10 @@ def patch_expense(
 )
 def delete_expense(
     expense_id: int,
-    expense=Depends(get_expense_or_404)
+    expense=Depends(get_expense_or_404),
+    session=Depends(database.get_session_dependency)
 ):
-    delete_expense_service(expense_id)
+    delete_expense_service(
+        expense_id,
+        session
+    )

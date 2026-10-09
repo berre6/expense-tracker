@@ -31,30 +31,34 @@ def patch_expense(
     amount=None,
     category=None
 ):
-    database.patch_expense(
+    return database.patch_expense_model(
+      expense_id,
+      name,
+      amount,
+      category,
+      session
+)
+
+def delete_expense(expense_id, session):
+    return database.delete_expense_model(
         expense_id,
-        name,
-        amount,
-        category
+        session
     )
 
-    session.expire_all()
-
-    return database.get_expense_model_by_id(expense_id, session)
-
-def delete_expense(expense_id):
-    database.delete_expense(expense_id)
-
-def get_expenses(category=None, page=1, limit=10):
+def get_expenses(category=None, page=1, limit=10, session=None):
     offset = (page - 1) * limit
 
     expenses = database.get_expense_models(
       category=category,
       limit=limit,
-      offset=offset
-)
+      offset=offset,
+      session=session
+    )
 
-    total = database.get_expense_count(category)
+    total = database.get_expense_count_model(
+      category=category,
+      session=session
+    )
     total_pages = ceil(total / limit)
 
     return {
