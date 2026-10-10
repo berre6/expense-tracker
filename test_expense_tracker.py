@@ -121,6 +121,62 @@ def test_create_expense_invalid_name():
 
     assert response.status_code == 422
 
+def test_create_expense_whitespace_name():
+    response = client.post(
+        "/expenses",
+        json={
+            "name": "   ",
+            "amount": 100,
+            "category": "Food"
+        }
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_expense_whitespace_category():
+    response = client.post(
+        "/expenses",
+        json={
+            "name": "Test",
+            "amount": 100,
+            "category": "   "
+        }
+    )
+
+    assert response.status_code == 422
+
+def test_api_patch_whitespace_name():
+    expense_id = database.add_expense(
+        "Patch Test",
+        100,
+        "Food",
+        "2026-09-11"
+    )
+
+    response = client.patch(
+        f"/expenses/{expense_id}",
+        json={"name": "   "}
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_patch_whitespace_category():
+    expense_id = database.add_expense(
+        "Patch Test",
+        100,
+        "Food",
+        "2026-09-11"
+    )
+
+    response = client.patch(
+        f"/expenses/{expense_id}",
+        json={"category": "   "}
+    )
+
+    assert response.status_code == 422
+
 def test_api_delete_expense():
     connection = database.get_connection()
     cursor = connection.cursor()

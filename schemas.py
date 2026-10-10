@@ -1,10 +1,17 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class ExpenseCreate(BaseModel):
     name: str = Field(min_length=1)
     amount: int = Field(gt=0)
     category: str = Field(min_length=1)
+
+    @field_validator("name", "category")
+    @classmethod
+    def reject_whitespace_only(cls, value):
+        if not value.strip():
+            raise ValueError("Field cannot contain only whitespace")
+        return value
 
 
 class ExpenseUpdate(BaseModel):
@@ -15,6 +22,13 @@ class ExpensePatch(BaseModel):
     name: str | None = None
     amount: int | None = Field(default=None, gt=0)
     category: str | None = None
+
+    @field_validator("name", "category")
+    @classmethod
+    def reject_whitespace_only(cls, value):
+      if value is not None and not value.strip():
+        raise ValueError("Field cannot contain only whitespace")
+      return value
 
     @model_validator(mode="after")
     def at_least_one_field(self):
