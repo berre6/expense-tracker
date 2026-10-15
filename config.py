@@ -7,7 +7,10 @@ class Settings(BaseSettings):
 
     @property
     def database_path(self):
-        return self.database_url.replace("sqlite:///", "")
+      prefix = "sqlite:///"
+      if not self.database_url.startswith(prefix):
+        raise ValueError("Only SQLite database URLs are supported")
+      return self.database_url[len(prefix):]
 
     model_config = ConfigDict(env_file=".env")
 

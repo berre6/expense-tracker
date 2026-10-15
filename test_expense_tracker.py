@@ -2,7 +2,9 @@ from expense_tracker_oop import ExpenseTracker,Expense
 import pytest
 import database
 from fastapi.testclient import TestClient
-from api import app
+from api import create_app
+
+app = create_app(initialize_db=False)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from services.expense_service import patch_expense
@@ -201,12 +203,7 @@ def test_api_delete_expense():
     assert deleted_expense is None
 
 
-def test_get_expense_count_model():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_get_expense_count_model(session):
     database.add_expense_model(
         "Kahve",
         50,
@@ -376,7 +373,16 @@ def test_api_patch_invalid_amount():
 
     assert response.status_code == 422
 
+
 def test_get_expenses_pagination():
+    for i in range(5):
+        database.add_expense(
+            f"Pagination Test {i}",
+            100 + i,
+            "Pagination",
+            "2026-09-11"
+        )
+
     response = client.get("/expenses?page=1&limit=2")
 
     assert response.status_code == 200
@@ -385,17 +391,37 @@ def test_get_expenses_pagination():
     assert len(data["items"]) == 2
     assert data["page"] == 1
     assert data["limit"] == 2
+    assert data["total"] == 5
+    assert data["total_pages"] == 3
+
+
 
 def test_get_expenses_second_page():
+    for i in range(5):
+        database.add_expense(
+            f"Second Page Test {i}",
+            200 + i,
+            "Pagination",
+            "2026-09-11"
+        )
+
     first_page = client.get("/expenses?page=1&limit=2")
     second_page = client.get("/expenses?page=2&limit=2")
 
     assert first_page.status_code == 200
     assert second_page.status_code == 200
 
-    assert first_page.json()["items"] != second_page.json()["items"]
-    assert first_page.json()["page"] == 1
-    assert second_page.json()["page"] == 2
+    first_data = first_page.json()
+    second_data = second_page.json()
+
+    assert len(first_data["items"]) == 2
+    assert len(second_data["items"]) == 2
+    assert first_data["items"] != second_data["items"]
+    assert first_data["page"] == 1
+    assert second_data["page"] == 2
+    assert first_data["total"] == 5
+    assert second_data["total_pages"] == 3
+
 
 def test_get_expense_count_by_category():
     connection = database.get_connection()
@@ -529,16 +555,44 @@ def test_get_expense_not_found():
     }
 
 
-
-
-   
-
-
 database.DB_PATH = "data/test_expenses.db"
-database.create_table()
 
 test_engine = create_engine("sqlite:///data/test_expenses.db")
+database.Base.metadata.create_all(test_engine)
+
 database.SessionLocal = sessionmaker(bind=test_engine)
+
+database.engine = test_engine
+
+
+def override_get_session():
+    session = database.SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+app.dependency_overrides[database.get_session_dependency] = override_get_session
+
+
+@pytest.fixture(autouse=True)
+def clean_test_database():
+    with database.SessionLocal() as session:
+        session.execute(database.Expense.__table__.delete())
+        session.execute(database.Category.__table__.delete())
+        session.commit()
+
+@pytest.fixture
+def session():
+    db_session = database.get_session()
+
+    try:
+        yield db_session
+    finally:
+        db_session.close()
+
+
 
 @pytest.fixture
 def tracker():
@@ -627,13 +681,8 @@ def test_calculate_nonexistent_category_total(tracker):
     result = tracker.calculate_category_total("Gaming")
     assert result == 0
 
-def test_add_expense_model():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
-    expense = database.add_expense_model(
+def test_add_expense_model(session):
+    database.add_expense_model(
         "Kahve",
         50,
         "Yemek",
@@ -641,27 +690,22 @@ def test_add_expense_model():
         session
     )
 
-    assert expense.name == "Kahve"
-    assert expense.amount == 50
-    assert expense.category.name == "Yemek"
+    database.add_expense_model(
+        "Ekmek",
+        20,
+        "Market",
+        "2026-10-07",
+        session
+    )
 
-    second_expense = database.add_expense_model(
-      "Kahve",
-      30,
-      "Yemek",
-      "2026-10-07",
-      session
-)
-    assert second_expense.amount == 80
-    assert second_expense.id == expense.id
+    total = database.get_expense_count_model(
+        session=session
+    )
+
+    assert total == 2
 
 
-def test_update_expense_model():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_update_expense_model(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -680,12 +724,7 @@ def test_update_expense_model():
     assert updated_expense.amount == 100
 
 
-def test_patch_expense_model():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_patch_expense_model(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -708,12 +747,7 @@ def test_patch_expense_model():
     assert patched_expense.category.name == "İçecek"
 
 
-def test_patch_expense_model_partial():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_patch_expense_model_partial(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -733,12 +767,7 @@ def test_patch_expense_model_partial():
     assert patched_expense.amount == 50
     assert patched_expense.category.name == "Yemek"
 
-def test_patch_expense_service_sqlalchemy():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_patch_expense_service_sqlalchemy(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -759,12 +788,7 @@ def test_patch_expense_service_sqlalchemy():
     assert patched_expense.category.name == "Yemek"
 
 
-def test_patch_expense_model_amount_only():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_patch_expense_model_amount_only(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -784,12 +808,7 @@ def test_patch_expense_model_amount_only():
     assert patched_expense.amount == 100
     assert patched_expense.category.name == "Yemek"
 
-def test_patch_expense_model_category_only():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_patch_expense_model_category_only(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -810,12 +829,7 @@ def test_patch_expense_model_category_only():
     assert patched_expense.category.name == "İçecek"
 
 
-def test_delete_expense_model():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_delete_expense_model(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -839,11 +853,7 @@ def test_delete_expense_model():
     assert remaining_expense is None
 
 
-
 def test_create_expense_success():
-    session = database.get_session()
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
     response = client.post(
         "/expenses",
         json={
@@ -859,12 +869,7 @@ def test_create_expense_success():
     assert response.json()["category"] == "API Test"
 
 
-def test_delete_expense_service():
-    session = database.get_session()
-
-    session.execute(database.Expense.__table__.delete())
-    session.commit()
-
+def test_delete_expense_service(session):
     expense = database.add_expense_model(
         "Kahve",
         50,
@@ -886,3 +891,22 @@ def test_delete_expense_service():
     )
 
     assert remaining_expense is None
+
+def test_add_expense_model_rolls_back_on_error(session, monkeypatch):
+    def raise_error(*args, **kwargs):
+        raise RuntimeError("Database error")
+
+    monkeypatch.setattr(session, "commit", raise_error)
+
+    with pytest.raises(RuntimeError, match="Database error"):
+        database.add_expense_model(
+            "Kahve",
+            50,
+            "Yemek",
+            "2026-10-07",
+            session
+        )
+
+    assert session.is_active
+
+

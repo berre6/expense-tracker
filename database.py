@@ -80,14 +80,16 @@ class Expense(Base):
 
 
 
-
 DB_PATH = settings.database_path
 
-engine = create_engine(settings.database_url)
 
-SessionLocal = sessionmaker(
-    bind=engine
-)
+def create_db_engine(database_url: str):
+    return create_engine(database_url)
+
+
+engine = create_db_engine(settings.database_url)
+SessionLocal = sessionmaker(bind=engine)
+
 
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
@@ -107,7 +109,13 @@ def get_session_dependency():
         session.close()
 
 
-Base.metadata.create_all(engine)
+
+def init_db(db_engine=None):
+    if db_engine is None:
+        db_engine = engine
+
+    Base.metadata.create_all(db_engine)
+
 
 
 def create_table():
@@ -244,50 +252,64 @@ def add_expense(name, amount, category, date):
     connection.close()
 
     return expense_id
+
+
 def add_expense_model(name, amount, category, date, session):
-    statement = select(Category).where(Category.name == category)
+    try:
+        statement = select(Category).where(Category.name == category)
 
-    result = session.execute(statement)
-    category_model = result.scalar_one_or_none()
+        result = session.execute(statement)
+        category_model = result.scalar_one_or_none()
 
-    if category_model is None:
-      category_model = Category(name=category)
-      session.add(category_model)
-      session.flush()
-    statement = select(Expense).where(
-    Expense.name == name,
-    Expense.category_id == category_model.id
-)
-    result = session.execute(statement)
-    existing_expense = result.scalar_one_or_none()
+        if category_model is None:
+            category_model = Category(name=category)
+            session.add(category_model)
+            session.flush()
 
-    if existing_expense is not None:
-        existing_expense.amount += amount
+        statement = select(Expense).where(
+            Expense.name == name,
+            Expense.category_id == category_model.id
+        )
 
-    else:
-      expense = Expense(
-        name=name,
-        amount=amount,
-        category_id=category_model.id,
-        date=date
-    )
-      session.add(expense)
-      session.flush()
+        result = session.execute(statement)
+        existing_expense = result.scalar_one_or_none()
 
-    session.commit()
-    return existing_expense if existing_expense is not None else expense
+        if existing_expense is not None:
+            existing_expense.amount += amount
+            expense = existing_expense
+        else:
+            expense = Expense(
+                name=name,
+                amount=amount,
+                category_id=category_model.id,
+                date=date
+            )
+            session.add(expense)
+            session.flush()
+
+        session.commit()
+        return expense
+
+    except Exception:
+        session.rollback()
+        raise
 
 def update_expense_model(expense_id, amount, session):
-    statement = select(Expense).where(Expense.id == expense_id)
+    try:
+        statement = select(Expense).where(Expense.id == expense_id)
 
-    result = session.execute(statement)
-    expense = result.scalar_one_or_none()
+        result = session.execute(statement)
+        expense = result.scalar_one_or_none()
 
-    if expense is not None:
-        expense.amount = amount
+        if expense is not None:
+            expense.amount = amount
 
-    session.commit()
-    return expense
+        session.commit()
+        return expense
+
+    except Exception:
+        session.rollback()
+        raise
 
 def patch_expense_model(
     expense_id,
@@ -296,35 +318,40 @@ def patch_expense_model(
     category=None,
     session=None
 ):
-    statement = select(Expense).where(Expense.id == expense_id)
+    try:
+        statement = select(Expense).where(Expense.id == expense_id)
 
-    result = session.execute(statement)
-    expense = result.scalar_one_or_none()
+        result = session.execute(statement)
+        expense = result.scalar_one_or_none()
 
-    if expense is not None:
-        if name is not None:
-            expense.name = name
+        if expense is not None:
+            if name is not None:
+                expense.name = name
 
-        if amount is not None:
-            expense.amount = amount
+            if amount is not None:
+                expense.amount = amount
 
-        if category is not None:
-            statement = select(Category).where(
-                Category.name == category
-            )
+            if category is not None:
+                statement = select(Category).where(
+                    Category.name == category
+                )
 
-            result = session.execute(statement)
-            category_model = result.scalar_one_or_none()
+                result = session.execute(statement)
+                category_model = result.scalar_one_or_none()
 
-            if category_model is None:
-                category_model = Category(name=category)
-                session.add(category_model)
-                session.flush()
+                if category_model is None:
+                    category_model = Category(name=category)
+                    session.add(category_model)
+                    session.flush()
 
-            expense.category_id = category_model.id
+                expense.category_id = category_model.id
 
-    session.commit()
-    return expense
+        session.commit()
+        return expense
+
+    except Exception:
+        session.rollback()
+        raise
 
 def get_expense_by_id(expense_id):
     connection = sqlite3.connect(DB_PATH)
@@ -585,16 +612,21 @@ def delete_expense(expense_id):
     connection.close()
 
 def delete_expense_model(expense_id, session):
-    statement = select(Expense).where(Expense.id == expense_id)
+    try:
+        statement = select(Expense).where(Expense.id == expense_id)
 
-    result = session.execute(statement)
-    expense = result.scalar_one_or_none()
+        result = session.execute(statement)
+        expense = result.scalar_one_or_none()
 
-    if expense is not None:
-        session.delete(expense)
-        session.commit()
+        if expense is not None:
+            session.delete(expense)
+            session.commit()
 
-    return expense
+        return expense
+
+    except Exception:
+        session.rollback()
+        raise
 
 def get_total_expenses():
     connection = sqlite3.connect(DB_PATH)
